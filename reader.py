@@ -20,37 +20,6 @@ editing_rect = None
 with open("data.igc", "r") as f:
     parsed_igc_file = igc_reader.read(f)
 
-class Rectangle:
-    def __init__(self):
-        self.x0 = 0
-        self.x1 = 0
-        self.mousex = 0
-
-    def start(self, event):
-        self.x0 = event.xdata
-
-    def on_motion(self, event):
-        'on motion we will move the rect if the mouse is over us'
-        if event.xdata:
-            self.mousex = event.xdata
-
-    def on_release(self, event):
-        'on release we reset the press data'
-        self.press = None
-        self.rect.figure.canvas.draw()
-
-    def disconnect(self):
-        'disconnect all the stored connection ids'
-        self.rect.figure.canvas.mpl_disconnect(self.cidpress)
-        self.rect.figure.canvas.mpl_disconnect(self.cidrelease)
-        self.rect.figure.canvas.mpl_disconnect(self.cidmotion)
-
-    def draw(self, ax):
-        ax.bar(self.x0, 500, self.mousex - self.x0, color=(1, 0, 0, 0.5), align='edge')
-
-    def finish(self):
-        pass
-
 def normalise_datetime(df):
     to_datetime = partial(datetime.datetime.combine, date)
     df["time"] = df["time"].apply(to_datetime)
@@ -59,24 +28,6 @@ def normalise_datetime(df):
 
 def resample(df, freq=1):
     return df.resample("1s", base=0).mean().dropna()
-
-def onclick(event):
-    global editing_rect
-
-    if editing_rect:
-        editing_rect.finish()
-        editing_rect = None
-    else:
-        rect = Rectangle()
-        rect.start(event)
-        rects.append(rect)
-        editing_rect = rect
-
-def onmotion(event):
-    global editing_rect
-
-    if editing_rect:
-        editing_rect.on_motion(event)
 
 m = 818  # kg
 g = 9.81  # m/s^2
@@ -108,9 +59,6 @@ def draw(_):
         rect.draw(ax1)
 
 ani = animation.FuncAnimation(fig, draw, interval=20)
-
-fig.canvas.mpl_connect('button_press_event', onclick)
-fig.canvas.mpl_connect('motion_notify_event', onmotion)
 
 plt.show()
 # df.to_csv("data.csv")
