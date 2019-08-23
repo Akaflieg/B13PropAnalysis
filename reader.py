@@ -19,6 +19,7 @@ g = 9.81  # m/s^2
 
 # fig, (ax_data_1, ax_zones) = plt.subplots(2, 1, sharex=False)
 
+
 class PropAnalysisWidget(PropAnalysisWidgetBase):
     """docstring for ClassName"""
 
@@ -26,22 +27,26 @@ class PropAnalysisWidget(PropAnalysisWidgetBase):
         super().__init__()
 
         self.df = None
+        # self.zones = pd.DataFrame(columns=["vs", "start", "end"])
         self.zones = []
-
-    def show_data(self, filename):
-        self.df = analyse_igc(read_igc(filename))
 
         self.ax_data_1 = self.fig.add_subplot(111)
         self.ax_data_2 = self.ax_data_1.twinx()
 
+    def show_data(self, filename):
+        self.ax_data_1.clear()
+        self.ax_data_2.clear()
+
         self.ax_data_2.grid()
 
-        self.df[["vs", "vs_smooth"]].plot(ax=self.ax_data_1)
-        self.df[["pressure_alt"]].plot(
+        self.df = analyse_igc(read_igc(filename))
+
+        self.df[["vs_smooth"]].plot(ax=self.ax_data_1)
+        self.df[["RPM"]].plot(
             ax=self.ax_data_2, color="green", linewidth=1)
 
         self.span = mwidgets.SpanSelector(self.ax_data_2, self.onselect, 'horizontal',
-                                     span_stays=True, rectprops=dict(facecolor='blue', alpha=0.5), useblit=True)
+                                          rectprops=dict(facecolor='blue', alpha=0.5), useblit=True)
         # print(df[df.isna().any(axis=1)].head(50))
 
         # plt.show()
@@ -51,14 +56,18 @@ class PropAnalysisWidget(PropAnalysisWidgetBase):
         if abs(vmax - vmin) < 0.0005:
             return
 
-        self.zones.append([vmin, vmax])
-        self.ax_data_2.text((vmax + vmin) / 2, 0, len(self.zones),
-                       horizontalalignment="center")
-        self.ax_data_2.axvspan(vmin, vmax, alpha=0.5)
+        text = self.ax_data_2.text((vmax + vmin) / 2, 0, len(self.zones) + 1,
+                                   horizontalalignment="center")
+        rect = self.ax_data_2.axvspan(vmin, vmax, alpha=0.5)
 
         vmin_dt = datetime.utcfromtimestamp(vmin)
         vmax_dt = datetime.utcfromtimestamp(vmax)
 
+        mean = self.df["vs"][vmin_dt:vmax_dt].mean()
+
+        row_count = self.data_table.rowCount()
+        self.zones.append({"start": vmin, "end": vmax,
+                           "mean": round(mean, 3), "rect": rect, "text": text})
         # selections = df.index.to_series()
         # selections = pd.to_numeric(selections)
         # selections[:] = np.nan
@@ -67,11 +76,39 @@ class PropAnalysisWidget(PropAnalysisWidgetBase):
 
         # ax_zones.clear()
         # ax_zones.plot(selections)
+        self.update_zones()
+
+    def update_zones(self):
+        self.data_table.setRowCount(0)
+        for i, zone in enumerate(self.zones):
+            self.data_table.insertRow(i)
+            self.data_table.setItem(
+                i, 0, QtWidgets.QTableWidgetItem(str(zone["mean"])))
+            zone["text"].set_text(str(i + 1))
+
+        self.fig_canvas.draw()
+
+    def remove_selected(self):
+        selected = self.data_table.selectedIndexes()
+        if selected:
+            zone = self.zones.pop(selected[0].row())
+            zone["text"].remove()
+            zone["rect"].remove()
+            self.update_zones()
+            # self.data_table.removeRow(selected[0].row())
+
+    def save(self):
+        df = pd.DataFrame(self.zones)
+        df["start"] = pd.to_datetime(df["start"], unit="s")
+        df["end"] = pd.to_datetime(df["end"], unit="s")
+        df.index.name = 'id'
+        fname = self.logfile[:-4]
+        df[["start", "end", "mean"]].to_csv(f"{fname}.csv")
 
 
 def read_igc(filename):
     igc_reader = Reader()
-    
+
     with open(filename, "r") as f:
         return igc_reader.read(f)
 
