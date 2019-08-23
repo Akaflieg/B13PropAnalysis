@@ -10,88 +10,112 @@ import numpy as np
 import datetime
 from functools import partial
 from datetime import datetime, date
-
-igc_reader = Reader()
-
-date = date(2019, 8, 21)
-rects = []
-fig, (ax_data_1, ax_zones) = plt.subplots(2, 1, sharex=False)
-# fig, ax_data_1 = plt.subplots()
-ax_data_2 = ax_data_1.twinx()
-
-zones = []
-
-with open("data.igc", "r") as f:
-    parsed_igc_file = igc_reader.read(f)
-
-def normalise_datetime(df):
-    to_datetime = partial(datetime.combine, date)
-    df["time"] = df["time"].apply(to_datetime)
-    df.set_index("time", inplace=True)
-    # df.sort_index(inplace=True)
-    return df
-
-def resample(df, freq=1):
-    return df.resample("1s", base=0).interpolate(method="time").dropna()
-
-def onselect(vmin, vmax):
-    global df
-
-    if abs(vmax - vmin) < 0.0005:
-        return
-
-    zones.append([vmin, vmax])
-    ax_data_2.text((vmax+vmin)/2, 0, len(zones), horizontalalignment="center")
-    ax_data_2.axvspan(vmin, vmax, alpha=0.5)
-    print(vmin, vmax)
-
-    vmin_dt = datetime.fromtimestamp(vmin)
-    vmax_dt = datetime.fromtimestamp(vmax)
-
-    selections = df.index.to_series()
-    selections = pd.to_numeric(selections)
-    selections[:] = np.nan
-    # return
-    selections.loc[vmin_dt:vmax_dt] = df["vs"][vmin_dt:vmax_dt].mean()
-
-    print(selections)
-    print(selections[selections.notna().any()])
-
-    #ax_zones.clear()
-    ax_zones.plot(selections)
+from gui import PropAnalysisWidgetBase
+from PySide2 import QtWidgets
+import sys
 
 m = 818  # kg
 g = 9.81  # m/s^2
 
-print(f"Parsing logger file from {parsed_igc_file['header'][1]['glider_registration']}")
+# fig, (ax_data_1, ax_zones) = plt.subplots(2, 1, sharex=False)
 
-df = pd.DataFrame(parsed_igc_file["fix_records"][1])
-df = df.drop(["validity"], axis=1)
-df = normalise_datetime(df)
-df = resample(df)
-df["TAS"] = df["TAS"] / 100 / 3.6  # m/s
-df["Ekin"] = 0.5 * m * df["TAS"] ** 2  # J
-df["Epot"] = m * df["gps_alt"] * g  # J
-df["E"] = df["Ekin"] + df["Epot"]  # J
+class PropAnalysisWidget(PropAnalysisWidgetBase):
+    """docstring for ClassName"""
 
-# print(df.diff()["pressure_alt"])
-# print(df.index.to_series().diff())
-# print(df.diff()["pressure_alt"] / df.index.to_series().diff())
-# df["alt"] = np.gradient(df["pressure_alt"])
-df["vs"] = df["pressure_alt"].diff()
-df["vs_smooth"] = df["vs"].rolling(5).mean()
+    def __init__(self):
+        super().__init__()
 
-ax_data_2.grid()
+        self.df = None
+        self.zones = []
 
-# ani = animation.FuncAnimation(fig, draw, interval=20)
+    def show_data(self, filename):
+        self.df = analyse_igc(read_igc(filename))
 
-rectprops = dict(facecolor='blue', alpha=0.5)
+        self.ax_data_1 = self.fig.add_subplot(111)
+        self.ax_data_2 = self.ax_data_1.twinx()
 
-df[["vs", "vs_smooth"]].plot(ax=ax_data_1)
-df[["pressure_alt"]].plot(ax=ax_data_2, color="green", linewidth=1)
+        self.ax_data_2.grid()
 
-span = mwidgets.SpanSelector(ax_data_2, onselect, 'horizontal', span_stays=True, rectprops=rectprops)
-print(df[df.isna().any(axis=1)].head(50))
+        self.df[["vs", "vs_smooth"]].plot(ax=self.ax_data_1)
+        self.df[["pressure_alt"]].plot(
+            ax=self.ax_data_2, color="green", linewidth=1)
 
-plt.show()
+        self.span = mwidgets.SpanSelector(self.ax_data_2, self.onselect, 'horizontal',
+                                     span_stays=True, rectprops=dict(facecolor='blue', alpha=0.5), useblit=True)
+        # print(df[df.isna().any(axis=1)].head(50))
+
+        # plt.show()
+        self.fig_canvas.draw()
+
+    def onselect(self, vmin, vmax):
+        if abs(vmax - vmin) < 0.0005:
+            return
+
+        self.zones.append([vmin, vmax])
+        self.ax_data_2.text((vmax + vmin) / 2, 0, len(self.zones),
+                       horizontalalignment="center")
+        self.ax_data_2.axvspan(vmin, vmax, alpha=0.5)
+
+        vmin_dt = datetime.utcfromtimestamp(vmin)
+        vmax_dt = datetime.utcfromtimestamp(vmax)
+
+        # selections = df.index.to_series()
+        # selections = pd.to_numeric(selections)
+        # selections[:] = np.nan
+        # return
+        # selections.loc[vmin_dt:vmax_dt] = df["vs"][vmin_dt:vmax_dt].mean()
+
+        # ax_zones.clear()
+        # ax_zones.plot(selections)
+
+
+def read_igc(filename):
+    igc_reader = Reader()
+    
+    with open(filename, "r") as f:
+        return igc_reader.read(f)
+
+
+def normalise_datetime(df):
+    to_datetime = partial(datetime.combine, date(2019, 8, 21))
+    df["time"] = df["time"].apply(to_datetime)
+    df.set_index("time", inplace=True)
+    return df
+
+
+def resample(df, freq=1):
+    return df.resample("1s", base=0).interpolate(method="time").dropna()
+
+
+def analyse_igc(igc_data):
+    df = pd.DataFrame(igc_data["fix_records"][1])
+    df = df.drop(["validity"], axis=1)
+    df = normalise_datetime(df)
+    df = resample(df)
+    df["TAS"] = df["TAS"] / 100 / 3.6  # m/s
+    df["Ekin"] = 0.5 * m * df["TAS"] ** 2  # J
+    df["Epot"] = m * df["gps_alt"] * g  # J
+    df["E"] = df["Ekin"] + df["Epot"]  # J
+
+    # print(df.diff()["pressure_alt"] / df.index.to_series().diff())
+    # df["alt"] = np.gradient(df["pressure_alt"])
+    df["vs"] = df["pressure_alt"].diff()
+    df["vs_smooth"] = df["vs"].rolling(5).mean()
+
+    return df
+
+
+# print(f"Parsing logger file from {parsed_igc_file['header'][1]['glider_registration']}")
+
+
+
 # df.to_csv("data.csv")
+if __name__ == "__main__":
+    print("run")
+    app = QtWidgets.QApplication([])
+
+    widget = PropAnalysisWidget()
+    widget.resize(800, 600)
+    widget.show()
+
+    sys.exit(app.exec_())
