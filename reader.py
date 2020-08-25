@@ -121,7 +121,7 @@ def normalise_datetime(df):
 
 
 def resample(df, freq=1):
-    return df.resample("1s", base=0).interpolate(method="time").dropna()
+    return df.resample("1s", offset="0s").interpolate(method="time").dropna()
 
 
 def analyse_igc(igc_data):

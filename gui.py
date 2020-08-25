@@ -22,8 +22,8 @@ class PropAnalysisWidgetBase(QtWidgets.QMainWindow):
         self.select_button = QPushButton("Load")
         self.remove_button = QPushButton("Remove selected")
         self.save_button = QPushButton("Save")
-        self.data_table = QTableWidget();
-        self.data_table.setColumnCount(1);
+        self.data_table = QTableWidget()
+        self.data_table.setColumnCount(1)
         self.data_table.setHorizontalHeaderLabels(["avg vs"])
         self.data_table.setSelectionBehavior(QAbstractItemView.SelectRows)
 
@@ -43,7 +43,6 @@ class PropAnalysisWidgetBase(QtWidgets.QMainWindow):
         self.remove_button.pressed.connect(self.remove_selected)
         self.save_button.pressed.connect(self.save)
 
-
         self.igc_selector = QFileDialog(self)
         self.igc_selector.setFileMode(QFileDialog.ExistingFile)
         self.igc_selector.setNameFilter("IGC Files (*.igc)")
@@ -62,8 +61,8 @@ class PropAnalysisWidgetBase(QtWidgets.QMainWindow):
     def save(self):
         pass
 
+
 if __name__ == "__main__":
-    print("run")
     app = QtWidgets.QApplication([])
 
     widget = PropAnalysisWidgetBase()
